@@ -7,6 +7,7 @@ import { log } from 'shelljs/src/common';
 import { ConfigColl } from '../imports/api/configColl.js';
 import { Email } from 'meteor/email';
 import { NmapData } from '../imports/api/nmapData.js';
+import UpDownFlag from '../server/controlFlagStatus.js';
 
 Meteor.methods({
   'hosts.call' (urlId, myURL, freq, nmapScan) {
@@ -29,6 +30,8 @@ Meteor.methods({
       var timeToRun = config.defaultFreq;
     }
 
+    var f = new UpDownFlag("");
+
     // ****    set the next time for a check of the URL
     let nextCheck = moment(now).add(timeToRun, 'minutes').format('YYYY-MM-DD HH:mm:ss');
     if (nmapScan == true) {
@@ -36,9 +39,10 @@ Meteor.methods({
     }
 
     // ****    Now call the function to check our URLs status
-    callHostURL(myURL, urlId, nextCheck, timeToRun, nmapScan, nmapScanRecheck)
+    callHostURL(myURL, urlId, nextCheck, timeToRun, nmapScan, nmapScanRecheck, f)
   },
-  'emailResults' (status, color, myURL, urlId) {
+
+  'emailResults' (status, color, myURL, urlId, f) {
       let configCheck = ConfigColl.findOne({});
       let urlInfo = URLToCheck.findOne({ _id: urlId });
 
@@ -58,11 +62,16 @@ Meteor.methods({
               }
             });
           } else {
-              let toUser = urlInfo.emailAddress;
-              let fromUser = configCheck.emailUser;
-              let emailSubject = "Possible Site Down!";
-              let emailBody = "Your Site, " + myURL + " returned with a status of " + status + " during a recent check.  Please check your sites status to ensure it is up and running.";
-
+            let toUser = urlInfo.emailAddress;
+            let fromUser = configCheck.emailUser;
+            let emailSubject = "";
+            let emailBody = "Your Site, " + myURL + " returned with a status of " + status + " during a recent check.  Please check your sites status to ensure it is up and running.";
+            if(f.getChange){
+              f.setChange(false);
+              emailSubject = "Your site is back on air!";
+            }else{              
+              emailSubject = "Possible Site Down!";
+            }
               // we first add an entry into our notify collection to provide visual feedback
               // to the useer on the web-page.
               Meteor.call("add.notification", myURL, toUser, status, function(err, result) {
@@ -70,7 +79,6 @@ Meteor.methods({
                   console.log("Error adding Notification: " + err);
                 }
               });
-
               Email.send({
                   to: toUser,
                   from: fromUser,
@@ -80,6 +88,7 @@ Meteor.methods({
           }
       }
   },
+
 });
 
 // *******************************************************************************************
@@ -89,7 +98,7 @@ Meteor.methods({
 //
 // *******************************************************************************************
 
-callHostURL = function(myURL, urlId, nextCheck, timeToRun, nmapScan, nmapScanRecheck) {
+callHostURL = function(myURL, urlId, nextCheck, timeToRun, nmapScan, nmapScanRecheck, f) {
 
   HTTP.get(myURL, { mode: 'no-cors' }, function(err, result) {
     if (err) {
@@ -114,8 +123,11 @@ callHostURL = function(myURL, urlId, nextCheck, timeToRun, nmapScan, nmapScanRec
           color = "#FF0000";
           email = "Yes";
 
+          f.setFlag("down");
+          f.setUrl(myURL);
+
           // ****    now we'll call our email function to send the user an email
-          Meteor.call('emailResults', status, color, myURL, urlId);
+          Meteor.call('emailResults', status, color, myURL, urlId, f);
           repeatChecks(timeToRun);
         }
       });
@@ -134,32 +146,69 @@ callHostURL = function(myURL, urlId, nextCheck, timeToRun, nmapScan, nmapScanRec
         case 200:
           status = "Up";
           color = "#32CD32";
-          email = "No";
+          if ((f.getUrl() == myURL) && (f.getFlag() == "down")){
+            f.setChange(true);
+            email = "Yes";
+          }else{
+            email = "No";
+          }
+          f.setFlag("");
+          f.setUrl("");
           break;
         case 400:
           status = "Bad Request: 400";
           color = "#32CD32";
-          email = "No";
+          if ((f.getUrl() == myURL) && (f.getFlag() == "down")){
+            f.setChange(true);
+            email = "Yes";
+          }else{
+            email = "No";
+          }
+          f.setFlag("");
+          f.setUrl("");
           break;
         case 401:
           status = "Authorization Required";
           color = "#32CD32";
-          email = "No";
+          if ((f.getUrl() == myURL) && (f.getFlag() == "down")){
+            f.setChange(true);
+            email = "Yes";
+          }else{
+            email = "No";
+          }
+          f.setFlag("");
+          f.setUrl("");
           break;
         case 402:
           status = "Payment Required";
           color = "#32CD32";
-          email = "No";
+          if ((f.getUrl() == myURL) && (f.getFlag() == "down")){
+            f.setChange(true);
+            email = "Yes";
+          }else{
+            email = "No";
+          }
+          f.setFlag("");
+          f.setUrl("");
           break;
         case 403:
           status = "Access Forbidden";
           color = "#32CD32";
-          email = "No";
+          if ((f.getUrl() == myURL) && (f.getFlag() == "down")){
+            f.setChange(true);
+            email = "Yes";
+          }else{
+            email = "No";
+          }
+          f.setFlag("");
+          f.setUrl("");
           break;
         case 404:
           status = "Not Found";
           color = "#ff0000";
           email = "Yes";
+          f.setFlag("down");
+          f.setUrl(myURL);
           break;
         case 405:
           status = "Method Not Allowed";
@@ -170,41 +219,57 @@ callHostURL = function(myURL, urlId, nextCheck, timeToRun, nmapScan, nmapScanRec
           status = "Not Acceptable";
           color = "#FFA500";
           email = "Yes";
+          f.setFlag("down");
+          f.setUrl(myURL);
           break;
         case 407:
           status = "Proxy Authentication Required";
           color = "#FFA500";
           email = "Yes";
+          f.setFlag("down");
+          f.setUrl(myURL);
           break;
         case 408:
           status = "Request Timeout";
           color = "#FFA500";
           email = "Yes";
+          f.setFlag("down");
+          f.setUrl(myURL);
           break;
         case 409:
           status = "Conflict";
           color = "#FFA500";
           email = "Yes";
+          f.setFlag("down");
+          f.setUrl(myURL);
           break;
         case 410:
           status = "Gone";
           color = "#FFA500";
           email = "Yes";
+          f.setFlag("down");
+          f.setUrl(myURL);
           break;
         case 414:
           status = "Request URL Too Large";
           color = "#FFA500";
           email = "Yes";
+          f.setFlag("down");
+          f.setUrl(myURL);
           break;
         case 500:
           status = "Internal Server Error";
           color = "#FF0000";
           email = "Yes";
+          f.setFlag("down");
+          f.setUrl(myURL);
           break;
         default:
           status = "Undefined Response";
           color = "#FF0000";
           email = "Yes";
+          f.setFlag("down");
+          f.setUrl(myURL);
       }
 
 
@@ -220,7 +285,7 @@ callHostURL = function(myURL, urlId, nextCheck, timeToRun, nmapScan, nmapScanRec
       // ****    if we found a down status or potentially down, we set 'email' as yes
       // ****    and send the email to the user to notify them of the status.
       if (email == "Yes") {
-          Meteor.call('emailResults', status, color, myURL, urlId, function (err, result) {
+          Meteor.call('emailResults', status, color, myURL, urlId, f, function (err, result) {
               if (err) {
                   console.log("Error sending email: " + err);
               }
