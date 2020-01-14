@@ -30,7 +30,7 @@ Meteor.methods({
       var timeToRun = config.defaultFreq;
     }
 
-    var f = new UpDownFlag("");
+    let f = new UpDownFlag("");
 
     // ****    set the next time for a check of the URL
     let nextCheck = moment(now).add(timeToRun, 'minutes').format('YYYY-MM-DD HH:mm:ss');
@@ -88,7 +88,6 @@ Meteor.methods({
           }
       }
   },
-
 });
 
 // *******************************************************************************************
@@ -341,6 +340,8 @@ runTheChecks = function(timeToRun) {
   let status = "";
   let checkURLs = URLToCheck.find({}).fetch();
 
+  let f = new UpDownFlag("");
+
   if (typeof checkURLs != 'undefined' && checkURLs != "" && checkURLs != null) {
 
     let numUrlsToCheck = checkURLs.length;
@@ -370,7 +371,7 @@ runTheChecks = function(timeToRun) {
       let currStatus = HostStatus.findOne({ urlId: urlId }, { sort: { runOn: -1 } });
 
       // **** check the URL and see if it's up.
-      performURLCheck(now, nowFormatted, timeToRun, myURL, urlId);
+      performURLCheck(now, nowFormatted, timeToRun, myURL, urlId, f);
 
       // **** check the ping of the URL
       pingURL(now, nowFormatted, timeToRun, myURL, urlId);
@@ -474,7 +475,7 @@ repeatChecks = function(timeToRun, timerSet) {
 //
 // *******************************************************************************************
 
-performURLCheck = function(now, nowFormatted, freq, myURL, urlId) {
+performURLCheck = function(now, nowFormatted, freq, myURL, urlId, f) {
 
   let config = ConfigColl.findOne({});
 
@@ -490,7 +491,7 @@ performURLCheck = function(now, nowFormatted, freq, myURL, urlId) {
   let status = "";
   let color = "";
 
-  callHostURL(myURL, urlId, nextCheck, timeToRun);
+  callHostURL(myURL, urlId, nextCheck, timeToRun, null, null, f);
 }
 
 // **************************************************************************************************
